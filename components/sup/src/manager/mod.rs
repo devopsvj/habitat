@@ -668,7 +668,9 @@ impl Manager {
                 Err(e) => error!("Error retrieving open file descriptor count: {:?}", e),
             }
 
-            track_memory_stats();
+            if cfg!(unix) {
+                track_memory_stats();
+            }
 
             if feat::is_enabled(feat::TestExit) {
                 if let Ok(exit_file_path) = env::var("HAB_FEAT_TEST_EXIT") {
@@ -1429,6 +1431,7 @@ fn get_fd_count() -> std::io::Result<usize> {
     proc_self::FdIter::new().map(|f| f.count())
 }
 
+#[cfg(unix)]
 fn track_memory_stats() {
     // We'd like to track some memory stats, but these stats are cached and only refreshed
     // when the epoch is advanced. We manually advance it here to ensure our stats are
