@@ -125,7 +125,7 @@ pub fn proxy(frontend_port: u16, backend_port: u16) {
 
                 let mut members_encountered = HashSet::new();
 
-                for (_, &(ref member_id, ref message)) in &service_cache {
+                for &(ref member_id, ref message) in service_cache.values() {
                     members_encountered.insert(member_id);
                     xpub_sock.send(&message, 0).unwrap();
                 }

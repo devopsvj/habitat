@@ -22,7 +22,7 @@ use crate::eventsrv::config::Config;
 fn main() {
     let matches = app().get_matches();
     let config = match matches.value_of("config") {
-        Some(cfg) => Config::from_file(&cfg).unwrap_or(Config::default()),
+        Some(cfg) => Config::from_file(&cfg).unwrap_or_default(),
         None => Config::default(),
     };
 
