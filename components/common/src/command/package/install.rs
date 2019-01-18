@@ -54,6 +54,7 @@ use crate::hcore::package::metadata::PackageType;
 use crate::hcore::package::{
     Identifiable, PackageArchive, PackageIdent, PackageInstall, PackageTarget,
 };
+use crate::hcore::ChannelIdent;
 use glob;
 use hyper::status::StatusCode;
 
@@ -233,28 +234,6 @@ impl Default for LocalPackageUsage {
     }
 }
 
-/// Represents a release channel on a Builder Depot.
-// TODO fn: this type could be further developed and generalized outside this module
-struct Channel<'a>(&'a str);
-
-impl<'a> Channel<'a> {
-    fn new(name: &'a str) -> Self {
-        Channel(name)
-    }
-}
-
-impl<'a> Default for Channel<'a> {
-    fn default() -> Self {
-        Channel("stable")
-    }
-}
-
-impl<'a> fmt::Display for Channel<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 /// Represents a fully-qualified Package Identifier, meaning that the normally optional version and
 /// release package coordinates are guaranteed to be set. This fully-qualified-ness is checked on
 /// construction and as the underlying representation is immutable, this state does not change.
@@ -329,7 +308,7 @@ impl<'a> fmt::Display for FullyQualifiedPackageIdent<'a> {
 pub fn start<U, P1, P2>(
     ui: &mut U,
     url: &str,
-    channel: Option<&str>,
+    channel: Option<&ChannelIdent>,
     install_source: &InstallSource,
     product: &str,
     version: &str,
@@ -350,15 +329,15 @@ where
     debug!("install key_cache_path: {}", key_cache_path.display());
 
     let channel = match channel {
-        Some(name) => Channel::new(name),
-        None => Channel::default(),
+        Some(c) => Cow::Borrowed(c),
+        None => Cow::Owned(ChannelIdent::default()),
     };
 
     let task = InstallTask::new(
         install_mode,
         local_package_usage,
         url,
-        channel,
+        &channel,
         product,
         version,
         fs_root_path.as_ref(),
@@ -378,7 +357,7 @@ struct InstallTask<'a> {
     install_mode: &'a InstallMode,
     local_package_usage: &'a LocalPackageUsage,
     api_client: Client,
-    channel: Channel<'a>,
+    channel: &'a ChannelIdent,
     fs_root_path: &'a Path,
     /// The path to the local artifact cache (e.g., /hab/cache/artifacts)
     artifact_cache_path: &'a Path,
@@ -390,7 +369,7 @@ impl<'a> InstallTask<'a> {
         install_mode: &'a InstallMode,
         local_package_usage: &'a LocalPackageUsage,
         bldr_url: &str,
-        channel: Channel<'a>,
+        channel: &'a ChannelIdent,
         product: &str,
         version: &str,
         fs_root_path: &'a Path,
@@ -870,12 +849,12 @@ impl<'a> InstallTask<'a> {
         &self,
         ident: &PackageIdent,
         target: &PackageTarget,
-        channel: &Channel<'_>,
+        channel: &ChannelIdent,
         token: Option<&str>,
     ) -> Result<FullyQualifiedPackageIdent<'_>> {
         let origin_package = self
             .api_client
-            .show_package(ident, target, channel.0, token)?;
+            .show_package(ident, target, channel, token)?;
         FullyQualifiedPackageIdent::from(origin_package)
     }
 
@@ -1084,7 +1063,7 @@ impl<'a> InstallTask<'a> {
             }
         };
 
-        for channel in channels.iter().map(|c| Channel::new(c)) {
+        for channel in channels.iter().map(|s| ChannelIdent::from(s)) {
             if let Ok(pkg) =
                 self.fetch_latest_pkg_ident_in_channel_for(ident, target, &channel, token)
             {

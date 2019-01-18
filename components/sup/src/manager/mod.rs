@@ -16,7 +16,6 @@ pub mod service;
 #[macro_use]
 mod debug;
 pub mod commands;
-mod events;
 mod file_watcher;
 mod peer_watcher;
 mod periodic;
@@ -54,6 +53,7 @@ use crate::hcore::os::process::{self, Pid, Signal};
 use crate::hcore::os::signals::{self, SignalEvent};
 use crate::hcore::package::{Identifiable, PackageIdent, PackageInstall};
 use crate::hcore::service::ServiceGroup;
+use crate::hcore::ChannelIdent;
 use crate::launcher_client::{LauncherCli, LAUNCHER_LOCK_CLEAN_ENV, LAUNCHER_PID_ENV};
 use crate::protocol;
 use futures::prelude::*;
@@ -138,7 +138,7 @@ pub struct ManagerConfig {
     pub custom_state_path: Option<PathBuf>,
     pub eventsrv_group: Option<ServiceGroup>,
     pub update_url: String,
-    pub update_channel: String,
+    pub update_channel: ChannelIdent,
     pub gossip_listen: GossipListenAddr,
     pub ctl_listen: ListenCtlAddr,
     pub http_listen: http_gateway::ListenAddr,
@@ -164,7 +164,7 @@ impl Default for ManagerConfig {
             custom_state_path: None,
             eventsrv_group: None,
             update_url: "".to_string(),
-            update_channel: "".to_string(),
+            update_channel: ChannelIdent::default(),
             gossip_listen: GossipListenAddr::default(),
             ctl_listen: ListenCtlAddr::default(),
             http_listen: http_gateway::ListenAddr::default(),
@@ -221,7 +221,6 @@ pub struct Manager {
     pub state: Arc<ManagerState>,
     butterfly: butterfly::Server,
     census_ring: CensusRing,
-    events_group: Option<ServiceGroup>,
     fs_cfg: Arc<FsCfg>,
     launcher: LauncherCli,
     updater: ServiceUpdater,
@@ -337,7 +336,6 @@ impl Manager {
             updater: ServiceUpdater::new(server.clone()),
             census_ring: CensusRing::new(sys.member_id.clone()),
             butterfly: server,
-            events_group: cfg.eventsrv_group,
             launcher: launcher,
             peer_watcher: peer_watcher,
             spec_watcher: spec_watcher,
@@ -602,10 +600,6 @@ impl Manager {
             debug!("http-gateway started");
         }
 
-        let events = match self.events_group {
-            Some(ref evg) => Some(events::EventsMgr::start(evg.clone())),
-            None => None,
-        };
         // On Windows initializng the signal handler will create a ctrl+c handler for the
         // process which will disable default windows ctrl+c behavior and allow us to
         // handle via check_for_signal. However, if the supervsor is in a long running
@@ -682,27 +676,6 @@ impl Manager {
 
             if self.census_ring.changed() {
                 self.persist_state();
-                if let Some(ref events) = events {
-                    events.try_connect(&self.census_ring);
-                }
-
-                for service in self
-                    .state
-                    .services
-                    .read()
-                    .expect("Services lock is poisoned!")
-                    .values()
-                {
-                    if let Some(census_group) =
-                        self.census_ring.census_group_for(&service.service_group)
-                    {
-                        if let Some(member) = census_group.me() {
-                            if let Some(ref events) = events {
-                                events.send_service(member, service);
-                            }
-                        }
-                    }
-                }
             }
 
             for service in self

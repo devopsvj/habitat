@@ -34,6 +34,7 @@ use crate::hcore::{
     package::metadata::PackageType,
     package::{Identifiable, PackageIdent, PackageInstall, PackageTarget},
     service::ServiceGroup,
+    ChannelIdent,
 };
 use crate::manager::{
     service::{
@@ -226,14 +227,12 @@ pub fn service_load(
     opts: protocol::ctl::SvcLoad,
 ) -> NetResult<()> {
     let ident: PackageIdent = opts.ident.clone().ok_or_else(err_update_client)?.into();
-    let bldr_url = opts
-        .bldr_url
-        .clone()
-        .unwrap_or_else(|| protocol::DEFAULT_BLDR_URL.to_string());
+    let bldr_url = opts.bldr_url.clone().unwrap_or_default();
     let bldr_channel = opts
         .bldr_channel
-        .clone()
-        .unwrap_or_else(|| protocol::DEFAULT_BLDR_CHANNEL.to_string());
+        .as_ref()
+        .map(|s| ChannelIdent::from(s))
+        .unwrap_or_default();
     let force = opts.force.unwrap_or(false);
     let source = InstallSource::Ident(ident.clone(), *PackageTarget::active_target());
     match existing_specs_for_ident(&mgr.cfg, source.as_ref())? {
@@ -298,7 +297,7 @@ pub fn service_load(
                         req,
                         &source,
                         &service_spec.bldr_url,
-                        &service_spec.channel,
+                        &ChannelIdent::from(&service_spec.channel),
                         true,
                     )?;
 

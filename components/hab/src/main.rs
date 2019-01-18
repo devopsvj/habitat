@@ -45,7 +45,6 @@ use crate::common::command::package::install::{InstallMode, InstallSource, Local
 use crate::common::types::ListenCtlAddr;
 use crate::common::ui::{Coloring, Status, UIWriter, NONINTERACTIVE_ENVVAR, UI};
 use crate::hcore::binlink::default_binlink_dir;
-use crate::hcore::channel;
 #[cfg(windows)]
 use crate::hcore::crypto::dpapi::encrypt;
 use crate::hcore::crypto::keys::PairType;
@@ -55,6 +54,7 @@ use crate::hcore::fs::{
     cache_analytics_path, cache_artifact_path, cache_key_path, launcher_root_path,
 };
 use crate::hcore::package::PackageIdent;
+use crate::hcore::ChannelIdent;
 use clap::{ArgMatches, Shell};
 use futures::prelude::*;
 
@@ -496,10 +496,10 @@ fn sub_pkg_export(ui: &mut UI, m: &ArgMatches<'_>) -> Result<()> {
     let ident = PackageIdent::from_str(m.value_of("PKG_IDENT").unwrap())?;
     let format = &m.value_of("FORMAT").unwrap();
     let url = bldr_url_from_matches(&m)?;
-    let channel = m
+    let channel: ChannelIdent = m
         .value_of("CHANNEL")
-        .map(str::to_string)
-        .unwrap_or_else(channel::default);
+        .map(ChannelIdent::from)
+        .unwrap_or_default();
     let export_fmt = command::pkg::export::format_for(ui, &format)?;
     command::pkg::export::start(ui, &url, &channel, &ident, &export_fmt)
 }
@@ -1385,11 +1385,11 @@ fn bldr_url_from_matches(matches: &ArgMatches<'_>) -> Result<String> {
 
 /// Resolve a channel. Taken from the environment or from CLI args, if
 /// given.
-fn channel_from_matches(matches: &ArgMatches<'_>) -> String {
+fn channel_from_matches(matches: &ArgMatches<'_>) -> ChannelIdent {
     matches
         .value_of("CHANNEL")
-        .map(str::to_string)
-        .unwrap_or_else(channel::default)
+        .map(ChannelIdent::from)
+        .unwrap_or_default()
 }
 
 fn binlink_dest_dir_from_matches(matches: &ArgMatches<'_>) -> PathBuf {
